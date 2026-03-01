@@ -110,8 +110,11 @@ async def client(email_sender_stub, s3_storage_fake):
 
     Overrides the dependencies for email sender and S3 storage with test doubles.
     """
+    from database import get_db
+    from src.database.session_sqlite import get_sqlite_db
     app.dependency_overrides[get_accounts_email_notificator] = lambda: email_sender_stub
     app.dependency_overrides[get_s3_storage_client] = lambda: s3_storage_fake
+    app.dependency_overrides[get_db] = get_sqlite_db
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as async_client:
         yield async_client
@@ -138,7 +141,8 @@ async def db_session():
     This fixture yields an async session using `get_db_contextmanager`, ensuring that the session
     is properly closed after each test.
     """
-    async with get_db_contextmanager() as session:
+    from src.database.session_sqlite import get_sqlite_db_contextmanager
+    async with get_sqlite_db_contextmanager() as session:
         yield session
 
 

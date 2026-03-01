@@ -24,6 +24,7 @@ MoviesGenresModel = Table(
     Column(
         "genre_id",
         ForeignKey("genres.id", ondelete="CASCADE"), primary_key=True, nullable=False),
+    extend_existing=True
 )
 
 ActorsMoviesModel = Table(
@@ -35,6 +36,7 @@ ActorsMoviesModel = Table(
     Column(
         "actor_id",
         ForeignKey("actors.id", ondelete="CASCADE"), primary_key=True, nullable=False),
+    extend_existing=True
 )
 
 MoviesLanguagesModel = Table(
@@ -42,6 +44,7 @@ MoviesLanguagesModel = Table(
     Base.metadata,
     Column("movie_id", ForeignKey("movies.id", ondelete="CASCADE"), primary_key=True),
     Column("language_id", ForeignKey("languages.id", ondelete="CASCADE"), primary_key=True),
+    extend_existing=True
 )
 
 
