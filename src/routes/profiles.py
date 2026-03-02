@@ -1,15 +1,13 @@
-from datetime import datetime, timezone, date
-
-from fastapi import APIRouter, status, Depends, HTTPException, Header, Form, UploadFile, File
-from sqlalchemy import select, cast
+from fastapi import APIRouter, status, Depends, HTTPException, Header
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_s3_storage_client
 from database import UserModel, UserGroupEnum, UserProfileModel
 from database import get_db
-from schemas.profiles import ProfileResponseSchema, profile_schema, ProfileSchema
+from schemas.profiles import ProfileResponseSchema, profile_schema
+from security.token_manager import JWTAuthManager
 from storages import S3StorageInterface
-from validation import validate_image
 
 router = APIRouter()
 
@@ -22,18 +20,14 @@ async def get_current_user(authorization: str = Header(None), db: AsyncSession =
     if bearer[0] != "Bearer" or len(bearer) != 2:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Authorization header format. Expected 'Bearer <token>'")
 
-    stmt = select(AccessTokenModel).where(AccessTokenModel.token == bearer[1])
-    result = await db.execute(stmt)
-    token_result = result.scalars().first()
+    jwt_token = bearer[1]
+    try:
+        payload = JWTAuthManager.decode_access_token(jwt_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token has expired or is invalid")
 
-    now_utc = datetime.now(timezone.utc)
-    if not token_result or cast(datetime, token_result.expires_at).replace(tzinfo=timezone.utc) < now_utc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired."
-        )
 
-    stmt = select(UserModel).where(UserModel.id == token_result.user_id)
+    stmt = select(UserModel).where(UserModel.id == payload["user_id"])
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
@@ -116,7 +110,7 @@ async def create_user(
         db: AsyncSession = Depends(get_db),
         s3_client: S3StorageInterface = Depends(get_s3_storage_client),
 ):
-    profile, avatar = await profile_schema()
+    profile, avatar = data
     if current_user.id != user_id and not current_user.has_group(UserGroupEnum.ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
