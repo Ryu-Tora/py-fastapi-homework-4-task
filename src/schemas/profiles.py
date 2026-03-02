@@ -50,7 +50,7 @@ class ProfileSchema(BaseModel):
         return v
 
 
-async def profile_sсhema(
+async def profile_schema(
         first_name: str = Form(...),
         last_name: str = Form(...),
         gender: str = Form(...),

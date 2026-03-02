@@ -5,9 +5,9 @@ from sqlalchemy import select, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_s3_storage_client
-from database import UserModel, RefreshTokenModel, UserGroupEnum, UserProfileModel
+from database import UserModel, UserGroupEnum, UserProfileModel
 from database import get_db
-from schemas.profiles import ProfileResponseSchema, profile_sсhema, ProfileSchema
+from schemas.profiles import ProfileResponseSchema, profile_schema, ProfileSchema
 from storages import S3StorageInterface
 from validation import validate_image
 
@@ -18,11 +18,11 @@ async def get_current_user(authorization: str = Header(None), db: AsyncSession =
     if not authorization:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header is missing")
 
-    bearer = authorization.split()[0]
-    if bearer != "Bearer" or len(bearer) != 2:
+    bearer = authorization.split()
+    if bearer[0] != "Bearer" or len(bearer) != 2:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Authorization header format. Expected 'Bearer <token>'")
 
-    stmt = select(RefreshTokenModel).where(RefreshTokenModel.token == bearer[1])
+    stmt = select(AccessTokenModel).where(AccessTokenModel.token == bearer[1])
     result = await db.execute(stmt)
     token_result = result.scalars().first()
 
@@ -112,16 +112,11 @@ async def get_current_user(authorization: str = Header(None), db: AsyncSession =
 async def create_user(
         user_id: int,
         current_user: UserModel = Depends(get_current_user),
-        first_name: str = Form(...),
-        last_name: str = Form(...),
-        gender: str = Form(...),
-        date_of_birth: date = Form(...),
-        info: str = Form(...),
-        avatar: UploadFile = File(...),
-        data = Depends(profile_sсhema),
+        data = Depends(profile_schema),
         db: AsyncSession = Depends(get_db),
         s3_client: S3StorageInterface = Depends(get_s3_storage_client),
 ):
+    profile, avatar = await profile_schema()
     if current_user.id != user_id and not current_user.has_group(UserGroupEnum.ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -144,15 +139,6 @@ async def create_user(
             detail="User already has a profile."
         )
 
-    profile_data = ProfileSchema(
-        first_name=first_name,
-        last_name=last_name,
-        gender=gender,
-        date_of_birth=date_of_birth,
-        info=info
-    )
-
-    validate_image(avatar)
     try:
         file_name = f"{user_id}_avatar.jpg"
         avatar_url = await s3_client.upload_file(
@@ -168,11 +154,11 @@ async def create_user(
 
     new_profile = UserProfileModel(
         user_id=user_id,
-        first_name=profile_data.first_name,
-        last_name=profile_data.last_name,
-        gender=profile_data.gender,
-        date_of_birth=profile_data.date_of_birth,
-        info=profile_data.info,
+        first_name=profile.first_name,
+        last_name=profile.last_name,
+        gender=profile.gender,
+        date_of_birth=profile.date_of_birth,
+        info=profile.info,
         avatar=avatar_url,
     )
 
